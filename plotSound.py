@@ -10,11 +10,18 @@
 import pandas as pd
 import itertools
 import metpy.plots as metplt
+import seaborn as sns
 import matplotlib.pyplot as plt
+import matplotlib as mpl
+
 import numpy as np
 import os 
 import datetime as dt
+import Thermodyn as thermo
 
+
+''' set color codes in seaborn '''
+sns.set_color_codes()
 
 ''' set directory and input files '''
 base_directory='/Users/raulv/Desktop/SOUNDING'
@@ -23,7 +30,6 @@ usr_case = raw_input('\nIndicate case number (i.e. 1): ')
 case='case'+usr_case.zfill(2)
 casedir=base_directory+'/'+case
 out=os.listdir(casedir)
-# out.sort()
 file_sound=[]
 for f in out:
 	if f[-3:]=='tsv': 
@@ -67,17 +73,22 @@ def parse_dataframe(file_sound):
 	for n in col_names:
 		sounding[n].units=units[n]
 
-	# ''' add thermodynamics '''
-	# theta = thermo.theta(C=meteo.temp,hPa=meteo.press)
-	# thetaeq = thermo.theta_equiv(C=meteo.temp,hPa=meteo.press)
-	# meteo.loc[:,'theta'] = pd.Series(theta,index=meteo.index)	
-	# meteo.loc[:,'thetaeq'] = pd.Series(thetaeq,index=meteo.index)	
+	''' replace nan values '''
+	nan_value = -32768.00
+	sounding = sounding.applymap(lambda x: np.nan if x == nan_value else x)
+
+
+	''' add thermodynamics '''
+	theta = thermo.theta(K=sounding.TE,hPa=sounding.P)
+	thetaeq = thermo.theta_equiv(K=sounding.TE,hPa=sounding.P)
+	sounding.loc[:,'theta'] = pd.Series(theta,index=sounding.index)	
+	sounding.loc[:,'thetaeq'] = pd.Series(thetaeq,index=sounding.index)	
+
 
 	return sounding
 
 def plot_skew(sounding,date):
 
-	s=sounding
 	hgt=sounding.Height # [m]
 	pres=sounding.P #[hPa]
 	TE=sounding.TE - 273.15 # [C]
@@ -114,14 +125,58 @@ def plot_skew(sounding,date):
 	plt.draw()
 
 
+def plot_thermo(sounding,date):
+
+	hgt=sounding.Height # [m]
+	pres=sounding.P #[hPa]
+	TE=sounding.TE - 273.15 # [C]
+	TD=sounding.TD - 273.15 # [C]
+	theta=sounding.theta
+	thetaeq=sounding.thetaeq
+	U=sounding.u.values
+	V=sounding.v.values
+
+	fig,ax = plt.subplots(1,4,sharey=True,figsize=(8.5,11))
+
+	ax[0].plot(TE,hgt,label='Temp')
+	ax[0].plot(TD,hgt,label='Dewp')
+	plt.legend()
+	ax[0].set_xlim([-30,20])
+	ax[0].set_ylim([0,5000])
+	add_minor_grid(ax[0])
+
+	ax[1].plot(theta,hgt)
+	ax[1].set_xlim([270,330])
+	ax[1].set_ylim([0,5000])
+	add_minor_grid(ax[1])
+
+	ax[2].plot(thetaeq,hgt)
+	ax[2].set_xlim([270,330])
+	ax[2].set_ylim([0,5000])
+	add_minor_grid(ax[2])
+
+	ax[3].plot(U,hgt,label='u')
+	ax[3].plot(V,hgt,label='v')
+	plt.legend()
+	ax[3].set_xlim([-10,40])
+	ax[3].set_ylim([0,5000])
+	add_minor_grid(ax[3])
+
+def add_minor_grid(ax):
+	# ax.get_xaxis().set_minor_locator(mpl.ticker.AutoMinorLocator())
+	ax.get_yaxis().set_minor_locator(mpl.ticker.AutoMinorLocator())	
+	ax.grid(b=True, which='major', color='w', linewidth=1.0)
+	ax.grid(b=True, which='minor', color='w', linewidth=0.5)
+
+
 for f in file_sound:
 	print f
 	foo = parse_dataframe(f)
 	fs = os.path.basename(f)
 	raw_date=fs[:-4]
 	date = dt.datetime.strptime(raw_date, "%Y%m%d_%H%M%S")
-	# date = ' '
-	plot_skew(foo,date)
+	# plot_skew(foo,date)
+	plot_thermo(foo,date)
 
 plt.show()
 
