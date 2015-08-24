@@ -7,6 +7,7 @@
 """
 
 import numpy as np
+import pandas as pd
 from numpy.polynomial.polynomial import polyval
 
 class meteo(object):
@@ -30,8 +31,8 @@ class meteo(object):
 				self.pressure = value /1000 # [mb]
 			elif key == 'Pa':
 				self.pressure = value/100 # [hPa]
-			elif key == 'm':
-				self.hgt = value # [m] altitude in radiosonde
+			elif key == 'layer':
+				self.layer = value 
 
 
 		''' constants '''
@@ -173,8 +174,14 @@ def bv_freq_dry(**kwargs):
 	"""
 	meteo=parse_args(**kwargs)	
 	check_C=hasattr(meteo,'C')
-	check_K=hasattr(meteo,'K')	
-	check_hgt=hasattr(meteo,'m')
+	check_K=hasattr(meteo,'K')
+	check_p=hasattr(meteo,'pressure')		
+	check_layer=hasattr(meteo,'layer')
+
+	d = {'temp':meteo.K,'press':meteo.pressure,'layer':meteo.layer}
+	foo=pd.DataFrame(d).groupby('layer').mean()
+	print foo
+	exit()
 
 
 

@@ -19,6 +19,7 @@ import os
 import datetime as dt
 import Thermodyn as thermo
 
+import bisect
 
 ''' set color codes in seaborn '''
 sns.set_color_codes()
@@ -64,26 +65,29 @@ def parse_dataframe(file_sound):
 	col_units=get_var_units(file_sound)
 
 	''' read tabular file '''
-	sounding = pd.read_table(file_sound,skiprows=36,header=None)
-	sounding.drop(19 , axis=1, inplace=True)	
-	sounding.columns=col_names
+	raw_sounding = pd.read_table(file_sound,skiprows=36,header=None)
+	raw_sounding.drop(19 , axis=1, inplace=True)	
+	raw_sounding.columns=col_names
+	sounding=raw_sounding[['Height','TE','TD','RH','u','v','P','MR']]
 
-	''' assing metadata, but does not propagate out of def '''
-	units = dict(zip(col_names, col_units))
-	for n in col_names:
-		sounding[n].units=units[n]
 
 	''' replace nan values '''
 	nan_value = -32768.00
 	sounding = sounding.applymap(lambda x: np.nan if x == nan_value else x)
 
+	''' make layer field '''
+	sounding.loc[:,'layer'] = make_layer(sounding.Height,depth_m=100,centered=True)
+
 
 	''' add thermodynamics '''
-	theta = thermo.theta(K=sounding.TE,hPa=sounding.P)
-	thetaeq = thermo.theta_equiv(K=sounding.TE,hPa=sounding.P)
-	sounding.loc[:,'theta'] = pd.Series(theta,index=sounding.index)	
-	sounding.loc[:,'thetaeq'] = pd.Series(thetaeq,index=sounding.index)	
+	theta = thermo.theta(K=sounding.TE, hPa=sounding.P)
+	sounding.loc[:,'theta'] = pd.Series(theta, index=sounding.index)	
+	thetaeq = thermo.theta_equiv(K=sounding.TE, hPa=sounding.P)		
+	sounding.loc[:,'thetaeq'] = pd.Series(thetaeq,index=sounding.index)
+	bvf_dry= thermo.bv_freq_dry(K=sounding.TE, hPa=sounding.P, layer=sounding.layer)
 
+	print sounding[20:80]
+	exit()
 
 	return sounding
 
@@ -163,11 +167,48 @@ def plot_thermo(sounding,date):
 	add_minor_grid(ax[3])
 
 def add_minor_grid(ax):
+
 	# ax.get_xaxis().set_minor_locator(mpl.ticker.AutoMinorLocator())
 	ax.get_yaxis().set_minor_locator(mpl.ticker.AutoMinorLocator())	
 	ax.grid(b=True, which='major', color='w', linewidth=1.0)
 	ax.grid(b=True, which='minor', color='w', linewidth=0.5)
 
+def make_layer(height,**kwargs):
+	''' makes a new field layer 
+		so that values can be grouped 
+		later for layer-based calculations
+		(i.e. Brunt-Vaisala freq)
+	'''
+	centered=False
+	for key,value in kwargs.iteritems():
+		if key == 'depth_m': 
+			depth = value
+		elif key == 'centered':
+			centered = value
+	bottom=min(height)
+	top=max(height)
+	layer_value=range(0,int(top)+depth,depth)
+	layers = [layer_value[bisect.bisect_left(layer_value,item)] for item in height]
+
+	if centered:
+		layer_value=range(0,int(top)+depth/2,depth/2)
+		layers_half = [layer_value[bisect.bisect_left(layer_value,item)] for item in height]
+		f = lambda x,y: x if x == y else y - depth/2
+		return list(map(f,layers,layers_half))
+	else:
+		return layers
+
+
+def find_nearest2(array,target):
+
+	""" See stackoverflow answer from Bi Rico """
+	''' array must be sorted '''
+	idx = array.searchsorted(target)
+	idx = np.clip(idx, 1, len(array)-1)
+	left = array[idx-1]
+	right = array[idx]
+	idx -= target - left < right - target
+	return idx
 
 for f in file_sound:
 	print f
