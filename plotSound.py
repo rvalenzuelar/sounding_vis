@@ -19,13 +19,13 @@ import os
 import datetime as dt
 import Thermodyn as thermo
 
-import bisect
 
 ''' set color codes in seaborn '''
 sns.set_color_codes()
 
 ''' set directory and input files '''
-base_directory='/Users/raulv/Desktop/SOUNDING'
+# base_directory='/Users/raulv/Desktop/SOUNDING'
+base_directory='/home/rvalenzuela/BALLOON'
 print base_directory
 usr_case = raw_input('\nIndicate case number (i.e. 1): ')
 case='case'+usr_case.zfill(2)
@@ -68,32 +68,31 @@ def parse_dataframe(file_sound):
 	raw_sounding = pd.read_table(file_sound,skiprows=36,header=None)
 	raw_sounding.drop(19 , axis=1, inplace=True)	
 	raw_sounding.columns=col_names
-	sounding=raw_sounding[['Height','TE','TD','RH','u','v','P','MR']]
-
+	hgt = raw_sounding['Height']
+	sounding=raw_sounding[['TE','TD','RH','u','v','P','MR']]
+	sounding.index=hgt
 
 	''' replace nan values '''
 	nan_value = -32768.00
 	sounding = sounding.applymap(lambda x: np.nan if x == nan_value else x)
 
-	''' make layer field '''
-	sounding.loc[:,'layer'] = make_layer(sounding.Height,depth_m=100,centered=True)
-
-
-	''' add thermodynamics '''
+	''' add potential temperature '''
 	theta = thermo.theta(K=sounding.TE, hPa=sounding.P)
 	sounding.loc[:,'theta'] = pd.Series(theta, index=sounding.index)	
 	thetaeq = thermo.theta_equiv(K=sounding.TE, hPa=sounding.P)		
 	sounding.loc[:,'thetaeq'] = pd.Series(thetaeq,index=sounding.index)
-	bvf_dry= thermo.bv_freq_dry(K=sounding.TE, hPa=sounding.P, layer=sounding.layer)
 
-	print sounding[20:80]
-	exit()
+	''' add Brunt-Vaisala frequency '''
+	bvf_dry= thermo.bv_freq_dry(theta=sounding.theta, agl_m=hgt, depth_m=100,centered=True)
+	bvf_moist= thermo.bv_freq_moist(K=sounding.TE, hPa=sounding.P, 
+										agl_m=hgt, depth_m=100,centered=True)
+	sounding = pd.merge(sounding,bvf_dry,left_index=True,right_index=True,how='inner')
 
 	return sounding
 
 def plot_skew(sounding,date):
 
-	hgt=sounding.Height # [m]
+	hgt=sounding.index # [m]
 	pres=sounding.P #[hPa]
 	TE=sounding.TE - 273.15 # [C]
 	TD=sounding.TD - 273.15 # [C]
@@ -131,7 +130,7 @@ def plot_skew(sounding,date):
 
 def plot_thermo(sounding,date):
 
-	hgt=sounding.Height # [m]
+	hgt=sounding.index # [m]
 	pres=sounding.P #[hPa]
 	TE=sounding.TE - 273.15 # [C]
 	TD=sounding.TD - 273.15 # [C]
@@ -139,12 +138,13 @@ def plot_thermo(sounding,date):
 	thetaeq=sounding.thetaeq
 	U=sounding.u.values
 	V=sounding.v.values
+	BVFd=sounding.bvf_dry.values
 
-	fig,ax = plt.subplots(1,4,sharey=True,figsize=(8.5,11))
+	fig,ax = plt.subplots(1,5,sharey=True,figsize=(8.5,11))
 
 	ax[0].plot(TE,hgt,label='Temp')
 	ax[0].plot(TD,hgt,label='Dewp')
-	plt.legend()
+	# plt.legend()
 	ax[0].set_xlim([-30,20])
 	ax[0].set_ylim([0,5000])
 	add_minor_grid(ax[0])
@@ -161,10 +161,16 @@ def plot_thermo(sounding,date):
 
 	ax[3].plot(U,hgt,label='u')
 	ax[3].plot(V,hgt,label='v')
-	plt.legend()
+	# plt.legend()
 	ax[3].set_xlim([-10,40])
 	ax[3].set_ylim([0,5000])
 	add_minor_grid(ax[3])
+
+	ax[4].plot(BVFd*10000,hgt,'o')
+	# plt.legend()
+	ax[4].set_xlim([-6,6])
+	ax[4].set_ylim([0,5000])
+	add_minor_grid(ax[4])
 
 def add_minor_grid(ax):
 
@@ -173,30 +179,7 @@ def add_minor_grid(ax):
 	ax.grid(b=True, which='major', color='w', linewidth=1.0)
 	ax.grid(b=True, which='minor', color='w', linewidth=0.5)
 
-def make_layer(height,**kwargs):
-	''' makes a new field layer 
-		so that values can be grouped 
-		later for layer-based calculations
-		(i.e. Brunt-Vaisala freq)
-	'''
-	centered=False
-	for key,value in kwargs.iteritems():
-		if key == 'depth_m': 
-			depth = value
-		elif key == 'centered':
-			centered = value
-	bottom=min(height)
-	top=max(height)
-	layer_value=range(0,int(top)+depth,depth)
-	layers = [layer_value[bisect.bisect_left(layer_value,item)] for item in height]
 
-	if centered:
-		layer_value=range(0,int(top)+depth/2,depth/2)
-		layers_half = [layer_value[bisect.bisect_left(layer_value,item)] for item in height]
-		f = lambda x,y: x if x == y else y - depth/2
-		return list(map(f,layers,layers_half))
-	else:
-		return layers
 
 
 def find_nearest2(array,target):
@@ -210,6 +193,7 @@ def find_nearest2(array,target):
 	idx -= target - left < right - target
 	return idx
 
+
 for f in file_sound:
 	print f
 	foo = parse_dataframe(f)
@@ -218,6 +202,7 @@ for f in file_sound:
 	date = dt.datetime.strptime(raw_date, "%Y%m%d_%H%M%S")
 	# plot_skew(foo,date)
 	plot_thermo(foo,date)
+	# break
 
 plt.show()
 
