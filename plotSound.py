@@ -17,8 +17,8 @@ import matplotlib as mpl
 import numpy as np
 import os 
 import datetime as dt
-import Thermodyn as thermo
 
+import Thermodyn as thermo
 
 ''' set color codes in seaborn '''
 sns.set_color_codes()
@@ -71,10 +71,17 @@ def parse_dataframe(file_sound):
 	hgt = raw_sounding['Height']
 	sounding=raw_sounding[['TE','TD','RH','u','v','P','MR']]
 	sounding.index=hgt
+	sounding.units={'TE':'K', 'TD':'K', 'RH':'%' ,'u':'m s-1','v':'m s-1','P':'hPa','MR':'g kg-1'}
 
 	''' replace nan values '''
 	nan_value = -32768.00
 	sounding = sounding.applymap(lambda x: np.nan if x == nan_value else x)
+	td_new = thermo.dew_point(C=sounding.TE-273.15,relh=sounding.RH)+273.15
+	sounding.TD.update(td_new)
+	
+	# print sounding.TE
+	# print sounding.RH
+	# print td_new
 
 	''' add potential temperature '''
 	theta = thermo.theta(K=sounding.TE, hPa=sounding.P)
@@ -84,9 +91,12 @@ def parse_dataframe(file_sound):
 
 	''' add Brunt-Vaisala frequency '''
 	bvf_dry= thermo.bv_freq_dry(theta=sounding.theta, agl_m=hgt, depth_m=100,centered=True)
-	bvf_moist= thermo.bv_freq_moist(K=sounding.TE, hPa=sounding.P, 
-										agl_m=hgt, depth_m=100,centered=True)
-	sounding = pd.merge(sounding,bvf_dry,left_index=True,right_index=True,how='inner')
+	# bvf_moist= thermo.bv_freq_moist(K=sounding.TE, hPa=sounding.P, 
+										# agl_m=hgt, depth_m=100,centered=True)
+	# sounding = pd.merge(sounding,bvf_dry,left_index=True,right_index=True,how='inner')
+
+	# print sounding
+	
 
 	return sounding
 
@@ -121,7 +131,7 @@ def plot_skew(sounding,date):
 	skew.ax.set_ylabel('Pressure [hPa]')
 	skew.ax.set_xlabel('Temperature [degC]')
 
-	l1='Balloon sounding at XXX'
+	l1='Balloon sounding at Bodega Bay'
 	l2='\nDate: ' + date.strftime('%Y %m %d %H:%M:%S UTC')
 	plt.suptitle(l1+l2)
 
@@ -138,39 +148,55 @@ def plot_thermo(sounding,date):
 	thetaeq=sounding.thetaeq
 	U=sounding.u.values
 	V=sounding.v.values
-	BVFd=sounding.bvf_dry.values
+	# BVFd=sounding.bvf_dry.values
 
-	fig,ax = plt.subplots(1,5,sharey=True,figsize=(8.5,11))
+	fig,ax = plt.subplots(1,4,sharey=True,figsize=(8.5,11))
 
 	ax[0].plot(TE,hgt,label='Temp')
 	ax[0].plot(TD,hgt,label='Dewp')
-	# plt.legend()
+	ax[0].legend()
 	ax[0].set_xlim([-30,20])
 	ax[0].set_ylim([0,5000])
 	add_minor_grid(ax[0])
+	ax[0].set_xlabel('Temperature [C]')
+	ax[0].set_ylabel('Altitude [m]')
 
 	ax[1].plot(theta,hgt)
 	ax[1].set_xlim([270,330])
 	ax[1].set_ylim([0,5000])
 	add_minor_grid(ax[1])
+	for label in ax[1].xaxis.get_ticklabels()[::2]:
+		label.set_visible(False)
+	ax[1].set_xlabel('Theta [K]')
 
 	ax[2].plot(thetaeq,hgt)
 	ax[2].set_xlim([270,330])
 	ax[2].set_ylim([0,5000])
 	add_minor_grid(ax[2])
+	for label in ax[2].xaxis.get_ticklabels()[::2]:
+		label.set_visible(False)
+	ax[2].set_xlabel('Theta Eq. [K]')
 
 	ax[3].plot(U,hgt,label='u')
 	ax[3].plot(V,hgt,label='v')
-	# plt.legend()
+	ax[3].legend()
 	ax[3].set_xlim([-10,40])
 	ax[3].set_ylim([0,5000])
 	add_minor_grid(ax[3])
+	ax[3].set_xlabel('Wind Speed [ms-1]')
 
-	ax[4].plot(BVFd*10000,hgt,'o')
-	# plt.legend()
-	ax[4].set_xlim([-6,6])
-	ax[4].set_ylim([0,5000])
-	add_minor_grid(ax[4])
+	# ax[4].plot(BVFd*10000,hgt,'o')
+	# # plt.legend()
+	# ax[4].set_xlim([-6,6])
+	# ax[4].set_ylim([0,5000])
+	# add_minor_grid(ax[4])
+
+	l1='Balloon sounding at Bodega Bay'
+	l2='\nDate: ' + date.strftime('%Y %m %d %H:%M:%S UTC')
+	plt.suptitle(l1+l2)
+
+	plt.draw()
+
 
 def add_minor_grid(ax):
 
