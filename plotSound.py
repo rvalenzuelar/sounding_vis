@@ -17,6 +17,7 @@ import matplotlib as mpl
 import numpy as np
 import os 
 import datetime as dt
+import sys
 
 import Thermodyn as thermo
 
@@ -76,17 +77,15 @@ def parse_dataframe(file_sound):
 	''' replace nan values '''
 	nan_value = -32768.00
 	sounding = sounding.applymap(lambda x: np.nan if x == nan_value else x)
-	td_new = thermo.dew_point(C=sounding.TE-273.15,relh=sounding.RH)+273.15
-	sounding.TD.update(td_new)
 	
-	# print sounding.TE
-	# print sounding.RH
-	# print td_new
+
 
 	''' add potential temperature '''
-	theta = thermo.theta(K=sounding.TE, hPa=sounding.P)
+	theta = thermo.theta2(K=sounding.TE, hPa=sounding.P,mixing_ratio=sounding.MR/1000)
 	sounding.loc[:,'theta'] = pd.Series(theta, index=sounding.index)	
-	thetaeq = thermo.theta_equiv(K=sounding.TE, hPa=sounding.P)		
+
+	thetaeq = thermo.theta_equiv2(K=sounding.TE, hPa=sounding.P,
+										relh=sounding.RH,mixing_ratio=sounding.MR/1000)	
 	sounding.loc[:,'thetaeq'] = pd.Series(thetaeq,index=sounding.index)
 
 	''' add Brunt-Vaisala frequency '''
@@ -95,10 +94,55 @@ def parse_dataframe(file_sound):
 										# agl_m=hgt, depth_m=100,centered=True)
 	# sounding = pd.merge(sounding,bvf_dry,left_index=True,right_index=True,how='inner')
 
-	# print sounding
-	
 
 	return sounding
+
+def compare_potential_temp(sounding,date):
+
+	theta1 = thermo.theta1(K=sounding.TE, hPa=sounding.P)
+	theta2 = thermo.theta2(K=sounding.TE, hPa=sounding.P,mixing_ratio=sounding.MR/1000)
+		
+	thetaeq1 = thermo.theta_equiv1(K=sounding.TE, hPa=sounding.P)		
+	thetaeq2 = thermo.theta_equiv2(K=sounding.TE, hPa=sounding.P,
+										relh=sounding.RH,mixing_ratio=sounding.MR/1000)	
+
+	foo=pd.DataFrame({'theta1':theta1, 'thetaeq1':thetaeq1,'theta2':theta2, 'thetaeq2':thetaeq2})
+	y= foo.index.values
+	mpl.rcParams.update({'font.size': 18})
+
+	fig,ax=plt.subplots(figsize=(8.5,11))
+	ln1=ax.plot(theta1,y,label='theta=f(temp,press) - W&H')
+	ln2=ax.plot(theta2,y,label='theta=f(temp,press, w) - Bolton 1980')
+	ln3=ax.plot(thetaeq1,y,label='thetaeq=f(temp,press,ws)  - W&H')
+	ln4=ax.plot(thetaeq2,y,label='thetaeq=f(temp,press, w, rh) - Bolton 1980')
+	ax.set_xlim([280,320])
+	ax.set_ylim([0,5000])
+	ax.set_xlabel('Temperature [K]')
+	ax.set_ylabel('Altitude [m]')
+
+	ax2=ax.twiny()
+	ln5=ax2.plot(sounding.MR,y,sns.xkcd_rgb["amber"], label='mixing ratio')
+	ax2.set_xlim([0,8])
+	ax2.set_ylim([0,5000])
+	ax2.grid(False)
+	ax2.set_xlabel('Mixing ratio [g kg-1]')	
+
+	ax3=ax.twiny()
+	ln6=ax3.plot(sounding.RH,y,sns.xkcd_rgb["plum purple"], label='relative humidity')
+	ax3.set_xlim([0,100])
+	ax3.set_ylim([0,5000])
+	ax3.grid(False)
+	ax3.set_xlabel('Relative humidity [%]')
+	ax3.xaxis.set_label_coords(0.5, 1.07)
+	ax3.tick_params(direction='out', pad=35)
+	lns = ln1+ln2+ln3+ln4+ln5+ln6
+	labs = [l.get_label() for l in lns]
+	ax3.legend(lns, labs, loc=0)
+
+	plt.subplots_adjust(bottom=0.05,top=0.89)
+	datestr=date.strftime('%Y%m%d_%H%M%S')
+	plt.suptitle('Comparison of Potential Temperature BBY sounding '+datestr,y=0.99)
+	plt.draw()
 
 def plot_skew(sounding,date):
 
@@ -137,66 +181,84 @@ def plot_skew(sounding,date):
 
 	plt.draw()
 
-
 def plot_thermo(sounding,date):
 
 	hgt=sounding.index # [m]
 	pres=sounding.P #[hPa]
 	TE=sounding.TE - 273.15 # [C]
 	TD=sounding.TD - 273.15 # [C]
+	relh=sounding.RH
+	mixr=sounding.MR
 	theta=sounding.theta
 	thetaeq=sounding.thetaeq
 	U=sounding.u.values
 	V=sounding.v.values
-	# BVFd=sounding.bvf_dry.values
+	# BVFd=sounding.bvf_dry
 
-	fig,ax = plt.subplots(1,4,sharey=True,figsize=(8.5,11))
+	fig,ax = plt.subplots(1,5,sharey=True,figsize=(11,8.5))
 
-	ax[0].plot(TE,hgt,label='Temp')
-	ax[0].plot(TD,hgt,label='Dewp')
-	ax[0].legend()
-	ax[0].set_xlim([-30,20])
-	ax[0].set_ylim([0,5000])
-	add_minor_grid(ax[0])
-	ax[0].set_xlabel('Temperature [C]')
-	ax[0].set_ylabel('Altitude [m]')
+	n=0
+	ax[n].plot(TE,hgt,label='Temp')
+	ax[n].plot(TD,hgt,label='Dewp')
+	ax[n].legend()
+	ax[n].set_xlim([-30,20])
+	ax[n].set_ylim([0,5000])
+	add_minor_grid(ax[n])
+	ax[n].set_xlabel('Temperature [C]')
+	ax[n].set_ylabel('Altitude [m]')
 
-	ax[1].plot(theta,hgt)
-	ax[1].set_xlim([270,330])
-	ax[1].set_ylim([0,5000])
-	add_minor_grid(ax[1])
-	for label in ax[1].xaxis.get_ticklabels()[::2]:
+	n=1
+	ln1=ax[n].plot(mixr,hgt,label='mixr')
+	ax[n].set_xlim([0,8])
+	ax[n].set_ylim([0,5000])
+	add_minor_grid(ax[n])
+	for label in ax[n].xaxis.get_ticklabels()[::2]:
 		label.set_visible(False)
-	ax[1].set_xlabel('Theta [K]')
+	ax[n].set_xlabel('Mixing Ratio [g kg-1]')
+	axt=ax[n].twiny()
+	ln2=axt.plot(relh,hgt,'g',label='relh')
+	axt.set_xlim([0,100])
+	axt.set_ylim([0,5000])	
+	axt.set_xlabel('Relative humidity [%]')
+	axt.xaxis.set_label_coords(0.5, 1.04)
+	axt.grid(False)
+	lns = ln1+ln2
+	labs = [l.get_label() for l in lns]
+	axt.legend(lns, labs, loc=0)
 
-	ax[2].plot(thetaeq,hgt)
-	ax[2].set_xlim([270,330])
-	ax[2].set_ylim([0,5000])
-	add_minor_grid(ax[2])
-	for label in ax[2].xaxis.get_ticklabels()[::2]:
+	n=2
+	ax[n].plot(theta,hgt,label='Theta')
+	ax[n].plot(thetaeq,hgt,label='ThetaEq')	
+	ax[n].legend()
+	ax[n].set_xlim([280,320])
+	ax[n].set_ylim([0,5000])
+	add_minor_grid(ax[n])
+	for label in ax[n].xaxis.get_ticklabels()[::2]:
 		label.set_visible(False)
-	ax[2].set_xlabel('Theta Eq. [K]')
+	ax[n].set_xlabel('Theta [K]')
 
-	ax[3].plot(U,hgt,label='u')
-	ax[3].plot(V,hgt,label='v')
-	ax[3].legend()
-	ax[3].set_xlim([-10,40])
-	ax[3].set_ylim([0,5000])
-	add_minor_grid(ax[3])
-	ax[3].set_xlabel('Wind Speed [ms-1]')
+	n=3
+	ax[n].plot(U,hgt,label='u')
+	ax[n].plot(V,hgt,label='v')
+	ax[n].legend()
+	ax[n].set_xlim([-10,40])
+	ax[n].set_ylim([0,5000])
+	add_minor_grid(ax[n])
+	ax[n].set_xlabel('Wind Speed [ms-1]')
 
-	# ax[4].plot(BVFd*10000,hgt,'o')
+	# n=4
+	# ax[n].plot(BVFd*10000.,hgt,'o')
 	# # plt.legend()
-	# ax[4].set_xlim([-6,6])
-	# ax[4].set_ylim([0,5000])
-	# add_minor_grid(ax[4])
+	# ax[n].set_xlim([-6,6])
+	# ax[n].set_ylim([0,5000])
+	# add_minor_grid(ax[n])
 
-	l1='Balloon sounding at Bodega Bay'
-	l2='\nDate: ' + date.strftime('%Y %m %d %H:%M:%S UTC')
+	l1='Profile at BBY from sounding '
+	l2=date.strftime('%Y-%m-%d %H:%M:%S UTC')
 	plt.suptitle(l1+l2)
+	plt.subplots_adjust(bottom=0.05,top=0.89)
 
 	plt.draw()
-
 
 def add_minor_grid(ax):
 
@@ -204,9 +266,6 @@ def add_minor_grid(ax):
 	ax.get_yaxis().set_minor_locator(mpl.ticker.AutoMinorLocator())	
 	ax.grid(b=True, which='major', color='w', linewidth=1.0)
 	ax.grid(b=True, which='minor', color='w', linewidth=0.5)
-
-
-
 
 def find_nearest2(array,target):
 
@@ -219,18 +278,21 @@ def find_nearest2(array,target):
 	idx -= target - left < right - target
 	return idx
 
-
-for f in file_sound:
+iterfile=iter(file_sound)
+# next(iterfile)
+for f in iterfile:
 	print f
-	foo = parse_dataframe(f)
-	fs = os.path.basename(f)
-	raw_date=fs[:-4]
+	df = parse_dataframe(f)
+	fname = os.path.basename(f)
+	raw_date=fname[:-4]
 	date = dt.datetime.strptime(raw_date, "%Y%m%d_%H%M%S")
-	# plot_skew(foo,date)
-	plot_thermo(foo,date)
-	# break
+	# plot_skew(df,date)
+	plot_thermo(df,date)
+	# compare_potential_temp(df,date)
+	break
 
-plt.show()
+# plt.show()
+plt.show(block=False)
 
 
 
