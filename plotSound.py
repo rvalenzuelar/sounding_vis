@@ -25,8 +25,8 @@ import Thermodyn as thermo
 sns.set_color_codes()
 
 ''' set directory and input files '''
-# base_directory='/Users/raulv/Desktop/SOUNDING'
-base_directory='/home/rvalenzuela/BALLOON'
+base_directory='/Users/raulv/Desktop/SOUNDING'
+# base_directory='/home/rvalenzuela/BALLOON'
 print base_directory
 usr_case = raw_input('\nIndicate case number (i.e. 1): ')
 case='case'+usr_case.zfill(2)
@@ -81,19 +81,18 @@ def parse_dataframe(file_sound):
 
 
 	''' add potential temperature '''
-	theta = thermo.theta2(K=sounding.TE, hPa=sounding.P,mixing_ratio=sounding.MR/1000)
-	sounding.loc[:,'theta'] = pd.Series(theta, index=sounding.index)	
-
+	theta = thermo.theta2(K=sounding.TE, hPa=sounding.P,mixing_ratio=sounding.MR/1000)	
 	thetaeq = thermo.theta_equiv2(K=sounding.TE, hPa=sounding.P,
 										relh=sounding.RH,mixing_ratio=sounding.MR/1000)	
+	sounding.loc[:,'theta'] = pd.Series(theta, index=sounding.index)	
 	sounding.loc[:,'thetaeq'] = pd.Series(thetaeq,index=sounding.index)
 
 	''' add Brunt-Vaisala frequency '''
 	bvf_dry= thermo.bv_freq_dry(theta=sounding.theta, agl_m=hgt, depth_m=100,centered=True)
-	# bvf_moist= thermo.bv_freq_moist(K=sounding.TE, hPa=sounding.P, 
-										# agl_m=hgt, depth_m=100,centered=True)
-	# sounding = pd.merge(sounding,bvf_dry,left_index=True,right_index=True,how='inner')
-
+	bvf_moist= thermo.bv_freq_moist(K=sounding.TE, hPa=sounding.P, mixing_ratio=sounding.MR/1000,
+										agl_m=hgt, depth_m=100,centered=True)
+	sounding = pd.merge(sounding,bvf_dry,left_index=True,right_index=True,how='outer')
+	sounding = pd.merge(sounding,bvf_moist,left_index=True,right_index=True,how='outer')
 
 	return sounding
 
@@ -193,16 +192,19 @@ def plot_thermo(sounding,date):
 	thetaeq=sounding.thetaeq
 	U=sounding.u.values
 	V=sounding.v.values
-	# BVFd=sounding.bvf_dry
+	BVFd=sounding.bvf_dry
+	BVFm=sounding.bvf_moist
 
 	fig,ax = plt.subplots(1,5,sharey=True,figsize=(11,8.5))
+
+	hgt_lim=8000
 
 	n=0
 	ax[n].plot(TE,hgt,label='Temp')
 	ax[n].plot(TD,hgt,label='Dewp')
 	ax[n].legend()
 	ax[n].set_xlim([-30,20])
-	ax[n].set_ylim([0,5000])
+	ax[n].set_ylim([0,hgt_lim])
 	add_minor_grid(ax[n])
 	ax[n].set_xlabel('Temperature [C]')
 	ax[n].set_ylabel('Altitude [m]')
@@ -210,7 +212,7 @@ def plot_thermo(sounding,date):
 	n=1
 	ln1=ax[n].plot(mixr,hgt,label='mixr')
 	ax[n].set_xlim([0,8])
-	ax[n].set_ylim([0,5000])
+	ax[n].set_ylim([0,hgt_lim])
 	add_minor_grid(ax[n])
 	for label in ax[n].xaxis.get_ticklabels()[::2]:
 		label.set_visible(False)
@@ -218,7 +220,7 @@ def plot_thermo(sounding,date):
 	axt=ax[n].twiny()
 	ln2=axt.plot(relh,hgt,'g',label='relh')
 	axt.set_xlim([0,100])
-	axt.set_ylim([0,5000])	
+	axt.set_ylim([0,hgt_lim])	
 	axt.set_xlabel('Relative humidity [%]')
 	axt.xaxis.set_label_coords(0.5, 1.04)
 	axt.grid(False)
@@ -231,7 +233,7 @@ def plot_thermo(sounding,date):
 	ax[n].plot(thetaeq,hgt,label='ThetaEq')	
 	ax[n].legend()
 	ax[n].set_xlim([280,320])
-	ax[n].set_ylim([0,5000])
+	ax[n].set_ylim([0,hgt_lim])
 	add_minor_grid(ax[n])
 	for label in ax[n].xaxis.get_ticklabels()[::2]:
 		label.set_visible(False)
@@ -242,16 +244,19 @@ def plot_thermo(sounding,date):
 	ax[n].plot(V,hgt,label='v')
 	ax[n].legend()
 	ax[n].set_xlim([-10,40])
-	ax[n].set_ylim([0,5000])
+	ax[n].set_ylim([0,hgt_lim])
 	add_minor_grid(ax[n])
 	ax[n].set_xlabel('Wind Speed [ms-1]')
 
-	# n=4
-	# ax[n].plot(BVFd*10000.,hgt,'o')
-	# # plt.legend()
-	# ax[n].set_xlim([-6,6])
-	# ax[n].set_ylim([0,5000])
-	# add_minor_grid(ax[n])
+	n=4
+	ax[n].plot(BVFd*10000.,hgt,'o',label='dry')
+	ax[n].plot(BVFm*10000.,hgt,'o',label='moist')	
+	ax[n].axvline(x=0,linestyle=':',color='r')
+	ax[n].legend(loc=2)
+	ax[n].set_xlim([-6,6])
+	ax[n].set_ylim([0,hgt_lim])
+	add_minor_grid(ax[n])
+	ax[n].set_xlabel('BVF (x10^-4) [s-1]')
 
 	l1='Profile at BBY from sounding '
 	l2=date.strftime('%Y-%m-%d %H:%M:%S UTC')
@@ -289,7 +294,7 @@ for f in iterfile:
 	# plot_skew(df,date)
 	plot_thermo(df,date)
 	# compare_potential_temp(df,date)
-	break
+	# break
 
 # plt.show()
 plt.show(block=False)
