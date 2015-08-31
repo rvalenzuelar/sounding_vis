@@ -25,8 +25,8 @@ import Thermodyn as thermo
 sns.set_color_codes()
 
 ''' set directory and input files '''
-base_directory='/Users/raulv/Desktop/SOUNDING'
-# base_directory='/home/rvalenzuela/BALLOON'
+# base_directory='/Users/raulv/Desktop/SOUNDING'
+base_directory='/home/rvalenzuela/BALLOON'
 print base_directory
 usr_case = raw_input('\nIndicate case number (i.e. 1): ')
 case='case'+usr_case.zfill(2)
@@ -69,16 +69,32 @@ def parse_dataframe(file_sound):
 	raw_sounding = pd.read_table(file_sound,skiprows=36,header=None)
 	raw_sounding.drop(19 , axis=1, inplace=True)	
 	raw_sounding.columns=col_names
-	hgt = raw_sounding['Height']
-	sounding=raw_sounding[['TE','TD','RH','u','v','P','MR']]
-	sounding.index=hgt
-	sounding.units={'TE':'K', 'TD':'K', 'RH':'%' ,'u':'m s-1','v':'m s-1','P':'hPa','MR':'g kg-1'}
+	sounding=raw_sounding[['Height','TE','TD','RH','u','v','P','MR']]
+	sounding.units={'Height':'m','TE':'K', 'TD':'K', 'RH':'%' ,'u':'m s-1','v':'m s-1','P':'hPa','MR':'g kg-1'}
 
 	''' replace nan values '''
 	nan_value = -32768.00
 	sounding = sounding.applymap(lambda x: np.nan if x == nan_value else x)
 	
+	''' set index '''
+	sounding = sounding.set_index('Height')
 
+	''' QC  '''
+	sounding= sounding.groupby(sounding.index).first()
+	sounding.dropna(how='all',inplace=True)
+	sounding.RH = sounding.RH.apply(lambda x: 100 if x>100 else x)
+	u_nans = nan_fraction(sounding.u)
+	v_nans = nan_fraction(sounding.v)
+	if u_nans>0. or v_nans>0.:
+		sounding.u.interpolate(method='linear',inplace=True)
+		sounding.v.interpolate(method='linear',inplace=True)
+	rh_nans = nan_fraction(sounding.RH)
+	td_nans = nan_fraction(sounding.TD)
+	mr_nans = nan_fraction(sounding.MR)
+	if rh_nans<5. and td_nans>50. and mr_nans>50.:
+		sat_mixr = thermo.sat_mix_ratio(K= sounding.TE,hPa=sounding.P)
+		mixr=(sounding.RH/100)*sat_mixr*1000
+		sounding.loc[:,'MR']=mixr #[g kg-1]
 
 	''' add potential temperature '''
 	theta = thermo.theta2(K=sounding.TE, hPa=sounding.P,mixing_ratio=sounding.MR/1000)	
@@ -88,12 +104,18 @@ def parse_dataframe(file_sound):
 	sounding.loc[:,'thetaeq'] = pd.Series(thetaeq,index=sounding.index)
 
 	''' add Brunt-Vaisala frequency '''
+	hgt=sounding.index.values
 	bvf_dry= thermo.bv_freq_dry(theta=sounding.theta, agl_m=hgt, depth_m=100,centered=True)
 	bvf_moist= thermo.bv_freq_moist(K=sounding.TE, hPa=sounding.P, mixing_ratio=sounding.MR/1000,
 										agl_m=hgt, depth_m=100,centered=True)
+
 	sounding = pd.merge(sounding,bvf_dry,left_index=True,right_index=True,how='outer')
 	sounding = pd.merge(sounding,bvf_moist,left_index=True,right_index=True,how='outer')
-
+	sounding.bvf_dry.interpolate(method='linear',inplace=True)
+	sounding.bvf_moist.interpolate(method='linear',inplace=True)
+	sounding.loc[sounding.MR.isnull(),'bvf_dry']=np.nan
+	sounding.loc[sounding.MR.isnull(),'bvf_moist']=np.nan
+	
 	return sounding
 
 def compare_potential_temp(sounding,date):
@@ -197,7 +219,7 @@ def plot_thermo(sounding,date):
 
 	fig,ax = plt.subplots(1,5,sharey=True,figsize=(11,8.5))
 
-	hgt_lim=8000
+	hgt_lim=3000
 
 	n=0
 	ax[n].plot(TE,hgt,label='Temp')
@@ -249,8 +271,8 @@ def plot_thermo(sounding,date):
 	ax[n].set_xlabel('Wind Speed [ms-1]')
 
 	n=4
-	ax[n].plot(BVFd*10000.,hgt,'o',label='dry')
-	ax[n].plot(BVFm*10000.,hgt,'o',label='moist')	
+	ax[n].plot(BVFd*10000.,hgt,label='dry')
+	ax[n].plot(BVFm*10000.,hgt,label='moist')	
 	ax[n].axvline(x=0,linestyle=':',color='r')
 	ax[n].legend(loc=2)
 	ax[n].set_xlim([-6,6])
@@ -283,21 +305,40 @@ def find_nearest2(array,target):
 	idx -= target - left < right - target
 	return idx
 
+def nan_fraction(series):
+	nans = float(series.isnull().sum())
+	total = float(len(series.index))
+	return (nans/total)*100	
+
 iterfile=iter(file_sound)
+# next(iterfile)
+# next(iterfile)
+# next(iterfile)
+# next(iterfile)
 # next(iterfile)
 for f in iterfile:
 	print f
 	df = parse_dataframe(f)
+
+
 	fname = os.path.basename(f)
-	raw_date=fname[:-4]
-	date = dt.datetime.strptime(raw_date, "%Y%m%d_%H%M%S")
+	''' removes file extension and split date '''
+	raw_date=fname[:-4].split('_')
+	''' some files have preffix, so I take only datetime'''
+	raw_date = raw_date[-2:]
+	if len(raw_date[1]) == 6:
+		raw_date=raw_date[0]+raw_date[1]
+		date = dt.datetime.strptime(raw_date, "%Y%m%d%H%M%S")
+	else:
+		raw_date=raw_date[0]+raw_date[1]
+		date = dt.datetime.strptime(raw_date, "%Y%m%d%H%M")
 	# plot_skew(df,date)
 	plot_thermo(df,date)
 	# compare_potential_temp(df,date)
 	# break
 
-# plt.show()
-plt.show(block=False)
+plt.show()
+# plt.show(block=False)
 
 
 
