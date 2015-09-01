@@ -8,7 +8,6 @@
 
 
 import pandas as pd
-import itertools
 import metpy.plots as metplt
 import seaborn as sns
 import matplotlib.pyplot as plt
@@ -20,6 +19,7 @@ import datetime as dt
 import sys
 
 import Thermodyn as thermo
+import Meteoframes as mf
 
 ''' set color codes in seaborn '''
 sns.set_color_codes()
@@ -37,86 +37,6 @@ for f in out:
 	if f[-3:]=='tsv': 
 		file_sound.append(casedir+'/'+f)
 
-def get_var_names(file_sound):
-
-	names=[]
-	with open(file_sound,'r') as f:
-		for line in itertools.islice(f, 15, 34):
-			foo = line.split()
-			if foo[0]=='T':
-				'''pandas has a T property so
-				needs to be replaced'''
-				names.append('TE')
-			else:
-				names.append(foo[0])
-	return names
-
-def get_var_units(file_sound):
-
-	units=[]
-	with open(file_sound,'r') as f:
-		for line in itertools.islice(f, 15, 34):
-			foo = line.split()
-			units.append(foo[1])
-	return units
-
-def parse_dataframe(file_sound):
-
-	col_names=get_var_names(file_sound)
-	col_units=get_var_units(file_sound)
-
-	''' read tabular file '''
-	raw_sounding = pd.read_table(file_sound,skiprows=36,header=None)
-	raw_sounding.drop(19 , axis=1, inplace=True)	
-	raw_sounding.columns=col_names
-	sounding=raw_sounding[['Height','TE','TD','RH','u','v','P','MR']]
-	sounding.units={'Height':'m','TE':'K', 'TD':'K', 'RH':'%' ,'u':'m s-1','v':'m s-1','P':'hPa','MR':'g kg-1'}
-
-	''' replace nan values '''
-	nan_value = -32768.00
-	sounding = sounding.applymap(lambda x: np.nan if x == nan_value else x)
-	
-	''' set index '''
-	sounding = sounding.set_index('Height')
-
-	''' QC  '''
-	sounding= sounding.groupby(sounding.index).first()
-	sounding.dropna(how='all',inplace=True)
-	sounding.RH = sounding.RH.apply(lambda x: 100 if x>100 else x)
-	u_nans = nan_fraction(sounding.u)
-	v_nans = nan_fraction(sounding.v)
-	if u_nans>0. or v_nans>0.:
-		sounding.u.interpolate(method='linear',inplace=True)
-		sounding.v.interpolate(method='linear',inplace=True)
-	rh_nans = nan_fraction(sounding.RH)
-	td_nans = nan_fraction(sounding.TD)
-	mr_nans = nan_fraction(sounding.MR)
-	if rh_nans<5. and td_nans>50. and mr_nans>50.:
-		sat_mixr = thermo.sat_mix_ratio(K= sounding.TE,hPa=sounding.P)
-		mixr=(sounding.RH/100)*sat_mixr*1000
-		sounding.loc[:,'MR']=mixr #[g kg-1]
-
-	''' add potential temperature '''
-	theta = thermo.theta2(K=sounding.TE, hPa=sounding.P,mixing_ratio=sounding.MR/1000)	
-	thetaeq = thermo.theta_equiv2(K=sounding.TE, hPa=sounding.P,
-										relh=sounding.RH,mixing_ratio=sounding.MR/1000)	
-	sounding.loc[:,'theta'] = pd.Series(theta, index=sounding.index)	
-	sounding.loc[:,'thetaeq'] = pd.Series(thetaeq,index=sounding.index)
-
-	''' add Brunt-Vaisala frequency '''
-	hgt=sounding.index.values
-	bvf_dry= thermo.bv_freq_dry(theta=sounding.theta, agl_m=hgt, depth_m=100,centered=True)
-	bvf_moist= thermo.bv_freq_moist(K=sounding.TE, hPa=sounding.P, mixing_ratio=sounding.MR/1000,
-										agl_m=hgt, depth_m=100,centered=True)
-
-	sounding = pd.merge(sounding,bvf_dry,left_index=True,right_index=True,how='outer')
-	sounding = pd.merge(sounding,bvf_moist,left_index=True,right_index=True,how='outer')
-	sounding.bvf_dry.interpolate(method='linear',inplace=True)
-	sounding.bvf_moist.interpolate(method='linear',inplace=True)
-	sounding.loc[sounding.MR.isnull(),'bvf_dry']=np.nan
-	sounding.loc[sounding.MR.isnull(),'bvf_moist']=np.nan
-	
-	return sounding
 
 def compare_potential_temp(sounding,date):
 
@@ -305,10 +225,7 @@ def find_nearest2(array,target):
 	idx -= target - left < right - target
 	return idx
 
-def nan_fraction(series):
-	nans = float(series.isnull().sum())
-	total = float(len(series.index))
-	return (nans/total)*100	
+
 
 iterfile=iter(file_sound)
 # next(iterfile)
@@ -318,7 +235,7 @@ iterfile=iter(file_sound)
 # next(iterfile)
 for f in iterfile:
 	print f
-	df = parse_dataframe(f)
+	df = mf.parse_sounding(f)
 
 
 	fname = os.path.basename(f)
