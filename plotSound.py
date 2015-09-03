@@ -9,6 +9,9 @@
 
 import pandas as pd
 import metpy.plots as metplt
+import metpy.calc as metcal
+from metpy.units import units, concatenate
+
 import seaborn as sns
 import matplotlib.pyplot as plt
 import matplotlib as mpl
@@ -36,6 +39,39 @@ file_sound=[]
 for f in out:
 	if f[-3:]=='tsv': 
 		file_sound.append(casedir+'/'+f)
+
+def main():
+
+	iterfile=iter(file_sound)
+	# next(iterfile)
+	# next(iterfile)
+	# next(iterfile)
+	# next(iterfile)
+	# next(iterfile)
+	for f in iterfile:
+		print f
+		df = mf.parse_sounding(f)
+
+
+		fname = os.path.basename(f)
+		''' removes file extension and split date '''
+		raw_date=fname[:-4].split('_')
+		''' some files have preffix, so I take only datetime'''
+		raw_date = raw_date[-2:]
+		if len(raw_date[1]) == 6:
+			raw_date=raw_date[0]+raw_date[1]
+			date = dt.datetime.strptime(raw_date, "%Y%m%d%H%M%S")
+		else:
+			raw_date=raw_date[0]+raw_date[1]
+			date = dt.datetime.strptime(raw_date, "%Y%m%d%H%M")
+		
+		# plot_skew(df,date)
+		plot_thermo(df,date,top=5000)
+		# compare_potential_temp(df,date)
+		# break
+
+	plt.show()
+	# plt.show(block=False)
 
 
 def compare_potential_temp(sounding,date):
@@ -111,10 +147,11 @@ def plot_skew(sounding,date):
 	skew.plot_barbs(pres, U2, V2,y_clip_radius=0.005)
 	skew.plot_dry_adiabats()
 	skew.plot_moist_adiabats()
-	skew.ax.set_ylim(1000, 500)
-	skew.ax.set_xlim(-10, 30)
+	skew.ax.set_ylim(1000, 100)
+	# skew.ax.set_xlim(-10, 30)
 	skew.ax.set_ylabel('Pressure [hPa]')
 	skew.ax.set_xlabel('Temperature [degC]')
+
 
 	l1='Balloon sounding at Bodega Bay'
 	l2='\nDate: ' + date.strftime('%Y %m %d %H:%M:%S UTC')
@@ -122,7 +159,7 @@ def plot_skew(sounding,date):
 
 	plt.draw()
 
-def plot_thermo(sounding,date):
+def plot_thermo(sounding,date,**kwarg):
 
 	hgt=sounding.index # [m]
 	pres=sounding.P #[hPa]
@@ -139,7 +176,7 @@ def plot_thermo(sounding,date):
 
 	fig,ax = plt.subplots(1,5,sharey=True,figsize=(11,8.5))
 
-	hgt_lim=3000
+	hgt_lim=kwarg['top']
 
 	n=0
 	ax[n].plot(TE,hgt,label='Temp')
@@ -184,6 +221,7 @@ def plot_thermo(sounding,date):
 	n=3
 	ax[n].plot(U,hgt,label='u')
 	ax[n].plot(V,hgt,label='v')
+	ax[n].axvline(x=0,linestyle=':',color='r')
 	ax[n].legend()
 	ax[n].set_xlim([-10,40])
 	ax[n].set_ylim([0,hgt_lim])
@@ -203,7 +241,7 @@ def plot_thermo(sounding,date):
 	l1='Profile at BBY from sounding '
 	l2=date.strftime('%Y-%m-%d %H:%M:%S UTC')
 	plt.suptitle(l1+l2)
-	plt.subplots_adjust(bottom=0.05,top=0.89)
+	plt.subplots_adjust(bottom=0.06,top=0.89)
 
 	plt.draw()
 
@@ -226,37 +264,8 @@ def find_nearest2(array,target):
 	return idx
 
 
-
-iterfile=iter(file_sound)
-# next(iterfile)
-# next(iterfile)
-# next(iterfile)
-# next(iterfile)
-# next(iterfile)
-for f in iterfile:
-	print f
-	df = mf.parse_sounding(f)
-
-
-	fname = os.path.basename(f)
-	''' removes file extension and split date '''
-	raw_date=fname[:-4].split('_')
-	''' some files have preffix, so I take only datetime'''
-	raw_date = raw_date[-2:]
-	if len(raw_date[1]) == 6:
-		raw_date=raw_date[0]+raw_date[1]
-		date = dt.datetime.strptime(raw_date, "%Y%m%d%H%M%S")
-	else:
-		raw_date=raw_date[0]+raw_date[1]
-		date = dt.datetime.strptime(raw_date, "%Y%m%d%H%M")
-	# plot_skew(df,date)
-	plot_thermo(df,date)
-	# compare_potential_temp(df,date)
-	# break
-
-plt.show()
-# plt.show(block=False)
-
+''' start '''
+main()
 
 
 
