@@ -1,6 +1,6 @@
 """
-	Plot NOAA balloon soundings. Files
-	have extension tsv
+	Plot NOAA balloon soundings. 
+	Files have extension tsv
 
 	Raul Valenzuela
 	August, 2015
@@ -27,6 +27,15 @@ import Meteoframes as mf
 ''' set color codes in seaborn '''
 sns.set_color_codes()
 
+rc = {'axes.titlesize': 24,
+		'axes.labelsize': 18,
+		'ytick.labelsize':16,
+		'xtick.labelsize':16}
+
+# mpl.rcParams.update(rc)
+
+sns.set(rc=rc)
+
 ''' set directory and input files '''
 # base_directory='/Users/raulv/Desktop/SOUNDING'
 base_directory='/home/rvalenzuela/BALLOON'
@@ -40,14 +49,10 @@ for f in out:
 	if f[-3:]=='tsv': 
 		file_sound.append(casedir+'/'+f)
 
+
 def main():
 
 	iterfile=iter(file_sound)
-	# next(iterfile)
-	# next(iterfile)
-	# next(iterfile)
-	# next(iterfile)
-	# next(iterfile)
 	for f in iterfile:
 		print f
 		df = mf.parse_sounding(f)
@@ -65,8 +70,8 @@ def main():
 			raw_date=raw_date[0]+raw_date[1]
 			date = dt.datetime.strptime(raw_date, "%Y%m%d%H%M")
 		
-		# plot_skew(df,date)
-		plot_thermo(df,date,top=5000)
+		plot_skew(df,date)
+		# plot_thermo(df,date,top=5000)
 		# compare_potential_temp(df,date)
 		# break
 
@@ -85,7 +90,6 @@ def compare_potential_temp(sounding,date):
 
 	foo=pd.DataFrame({'theta1':theta1, 'thetaeq1':thetaeq1,'theta2':theta2, 'thetaeq2':thetaeq2})
 	y= foo.index.values
-	mpl.rcParams.update({'font.size': 18})
 
 	fig,ax=plt.subplots(figsize=(8.5,11))
 	ln1=ax.plot(theta1,y,label='theta=f(temp,press) - W&H')
@@ -118,7 +122,7 @@ def compare_potential_temp(sounding,date):
 
 	plt.subplots_adjust(bottom=0.05,top=0.89)
 	datestr=date.strftime('%Y%m%d_%H%M%S')
-	plt.suptitle('Comparison of Potential Temperature BBY sounding '+datestr,y=0.99)
+	plt.title('Comparison of Potential Temperature BBY sounding '+datestr,y=0.99)
 	plt.draw()
 
 def plot_skew(sounding,date):
@@ -130,7 +134,7 @@ def plot_skew(sounding,date):
 	U=sounding.u.values
 	V=sounding.v.values
 
-	freq=20
+	freq=20	
 	U2=np.empty(len(U))
 	U2[:]=np.NAN
 	U2[::freq]=U[::freq]
@@ -143,19 +147,21 @@ def plot_skew(sounding,date):
 	skew = metplt.SkewT(fig)
 
 	skew.plot(pres, TE, 'r')
-	skew.plot(pres, TD, 'g')
-	skew.plot_barbs(pres, U2, V2,y_clip_radius=0.005)
-	skew.plot_dry_adiabats()
-	skew.plot_moist_adiabats()
-	skew.ax.set_ylim(1000, 100)
-	# skew.ax.set_xlim(-10, 30)
+	skew.plot(pres, TD, 'g',linestyle='--')
+	skew.plot_barbs(pres, U2, V2)
+	p0=np.asarray([1000,900,800,700,600])*units.hPa
+	t0=np.asarray([0,5,10,15,20,25]) * units.degC
+	skew.plot_dry_adiabats(t0=t0,p=p0,linestyle='-',linewidth=0.8)
+	skew.plot_moist_adiabats(t0=t0, p=p0,linestyle='-',linewidth=0.8)
+	skew.ax.set_ylim(1014, 600)
+	skew.ax.set_xlim(-5, 15)
 	skew.ax.set_ylabel('Pressure [hPa]')
 	skew.ax.set_xlabel('Temperature [degC]')
 
 
 	l1='Balloon sounding at Bodega Bay'
-	l2='\nDate: ' + date.strftime('%Y %m %d %H:%M:%S UTC')
-	plt.suptitle(l1+l2)
+	l2='\nDate: ' + date.strftime('%Y-%b-%d %H:%M:%S UTC')
+	plt.title(l1+l2)
 
 	plt.draw()
 
