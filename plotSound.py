@@ -70,8 +70,8 @@ def main():
 			raw_date=raw_date[0]+raw_date[1]
 			date = dt.datetime.strptime(raw_date, "%Y%m%d%H%M")
 		
-		plot_skew(df,date)
-		# plot_thermo(df,date,top=5000)
+		# plot_skew(df,date)
+		plot_thermo(df,date,top=5000)
 		# compare_potential_temp(df,date)
 		# break
 
