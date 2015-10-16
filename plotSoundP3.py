@@ -24,6 +24,8 @@ import sys
 import Thermodyn as thermo
 import Meteoframes as mf
 
+from skewt import SkewT as sk
+
 ''' set color codes in seaborn '''
 sns.set_color_codes()
 rc = {'axes.titlesize': 20,
@@ -43,7 +45,7 @@ def main():
 	m=0
 	for i,e in zip(ini,end):
 
-		if m==13:
+		if m>=0:
 			sound=mf.parse_acft_sounding(f, i, e, return_interp=True)
 			# print sound
 			temp=sound.AIR_TEMP.values #[C]
@@ -61,11 +63,11 @@ def main():
 			bvf_moist=sound.bvf_moist.values
 			location=[np.average(lats),np.average(lons)]
 
-			plot_skew(	temp=temp, dewp=dewp, u=u, v=v, press=pres, date=[i, e],	loc=location)
+			# plot_skew1(temp=temp, dewp=dewp, u=u, v=v, press=pres, date=[i, e],	loc=location)
+			plot_skew2(temp=temp, dewp=dewp, u=u, v=v, press=pres, date=[i, e],	loc=location, hgt=hgt)
 			# plot_thermo(temp=temp, dewp=dewp, u=u, v=v, hgt=hgt,theta=theta, thetaeq=thetaeq,
 			# 			 bvf_dry=bvf_dry, bvf_moist=bvf_moist,press=pres, date=[i, e], loc=location,top=5000)
-			print pres 
-			print hgt
+
 
 		m+=1
 
@@ -73,11 +75,61 @@ def main():
 	# compare_potential_temp(df,date)
 	# break
 
-	# plt.show()
-	plt.show(block=False)
+	plt.show()
+	# plt.show(block=False)
 
 
-def plot_skew(**kwargs):
+# def plot_skew1(**kwargs):
+
+# 	pres=kwargs['press'] #[hPa]
+# 	TE=kwargs['temp'] # [C]
+# 	TD=kwargs['dewp'] # [C]
+# 	U=kwargs['u'] # [m s-1]
+# 	V=kwargs['v'] # [m s-1]
+# 	date=kwargs['date']
+# 	loc=kwargs['loc']
+
+# 	if np.amax(TE)>30:
+# 		TE=TE-273.15
+# 	if np.amax(TD)>30:
+# 		TD=TD-273.15		
+
+# 	freq=20	
+# 	U2=np.empty(len(U))
+# 	U2[:]=np.NAN
+# 	U2[::freq]=U[::freq]
+
+# 	V2=np.empty(len(V))
+# 	V2[:]=np.NAN
+# 	V2[::freq]=V[::freq]
+	
+# 	fig = plt.figure(figsize=(9, 9))
+# 	# fig,ax = plt.figure(figsize=(9, 9))
+# 	skew = metplt.SkewT(fig)
+# 	skew.plot(pres, TE, 'r')
+# 	skew.plot(pres, TD, 'g',linestyle='--')
+# 	skew.plot_barbs(pres, U2, V2)
+# 	p0=np.asarray([1000,900,800,700,600])*units.hPa
+# 	t0=np.asarray(range(-10,25,5)) * units.degC
+# 	skew.plot_dry_adiabats(t0=t0,p=p0,linestyle='-',linewidth=0.8)
+# 	skew.plot_moist_adiabats(t0=t0, p=p0,linestyle='-',linewidth=0.8)
+# 	skew.ax.set_ylim(1014, 600)
+# 	skew.ax.set_xlim(-10, 12)
+# 	skew.ax.set_ylabel('Pressure [hPa]')
+# 	skew.ax.set_xlabel('Temperature [degC]')
+
+
+# 	l1='Sounding from NOAA P3'
+# 	l2='\nIni: ' + date[0].strftime('%Y-%b-%d  %H:%M:%S UTC')
+# 	l3='\nEnd: ' + date[1].strftime('%Y-%b-%d  %H:%M:%S UTC')
+# 	l4='\nLat: '+'{:.2f}'.format(loc[0])+' Lon: '+'{:.2f}'.format(loc[1])
+
+# 	plt.title(l1+l2+l3+l4)
+# 	plt.subplots_adjust(top=0.85)
+
+# 	plt.draw()
+
+def plot_skew2(**kwargs):
 
 	pres=kwargs['press'] #[hPa]
 	TE=kwargs['temp'] # [C]
@@ -86,45 +138,14 @@ def plot_skew(**kwargs):
 	V=kwargs['v'] # [m s-1]
 	date=kwargs['date']
 	loc=kwargs['loc']
-
-	if np.amax(TE)>30:
-		TE=TE-273.15
-	if np.amax(TD)>30:
-		TD=TD-273.15		
-
-	freq=20	
-	U2=np.empty(len(U))
-	U2[:]=np.NAN
-	U2[::freq]=U[::freq]
-
-	V2=np.empty(len(V))
-	V2[:]=np.NAN
-	V2[::freq]=V[::freq]
-	
-	fig = plt.figure(figsize=(9, 9))
-	# fig,ax = plt.figure(figsize=(9, 9))
-	skew = metplt.SkewT(fig)
-	skew.plot(pres, TE, 'r')
-	skew.plot(pres, TD, 'g',linestyle='--')
-	skew.plot_barbs(pres, U2, V2)
-	p0=np.asarray([1000,900,800,700,600])*units.hPa
-	t0=np.asarray(range(-10,25,5)) * units.degC
-	skew.plot_dry_adiabats(t0=t0,p=p0,linestyle='-',linewidth=0.8)
-	skew.plot_moist_adiabats(t0=t0, p=p0,linestyle='-',linewidth=0.8)
-	skew.ax.set_ylim(1014, 600)
-	skew.ax.set_xlim(-10, 12)
-	skew.ax.set_ylabel('Pressure [hPa]')
-	skew.ax.set_xlabel('Temperature [degC]')
+	hgt=kwargs['hgt']
 
 
-	l1='Sounding from NOAA P3'
-	l2='\nIni: ' + date[0].strftime('%Y-%b-%d  %H:%M:%S UTC')
-	l3='\nEnd: ' + date[1].strftime('%Y-%b-%d  %H:%M:%S UTC')
-	l4='\nLat: '+'{:.2f}'.format(loc[0])+' Lon: '+'{:.2f}'.format(loc[1])
+	TD[TD>TE]=TE[TD>TE]
 
-	plt.title(l1+l2+l3+l4)
-	plt.subplots_adjust(top=0.85)
-
+	mydata=dict(zip(('hght','pres','temp','dwpt'),(hgt, pres, TE, TD)))
+	S=sk.Sounding(soundingdata=mydata)
+	S.plot_skewt()
 	plt.draw()
 
 
