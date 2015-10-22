@@ -47,18 +47,14 @@ bvf_clevels=np.arange(-4e-4,10e-4,2e-4)
 
 def main():
 	
-	file_sound = get_sounding_files(None)
+
+	file_sound, usc = get_sounding_files(usr_case)
 
 	''' raw soundings vertically-interpolated '''
 	# # soundarray,_,_,_,_ = get_raw_array('thetaeq', file_sound)	
-	# soundarray,_,_,_,_ = get_raw_array('bvf_moist', file_sound)	
-	# fig,ax=plt.subplots()
-	# # im=ax.imshow(soundarray,interpolation='none',origin='top',aspect='auto',vmin=298,vmax=308)
-	# im=ax.imshow(soundarray,interpolation='none',origin='top',aspect='auto',vmin=-8e-4,vmax=8e-4)
-	# ax.invert_xaxis()
-	# plt.subplots_adjust(left=0.125,right=0.9)	
-	# plt.colorbar(im)
-	# plt.draw()	
+	soundarray,_,_,y,x,raw_dates = get_raw_array('bvf_moist', file_sound)	
+	title='BVFm raw'
+	make_imshow(soundarray,title,x,y,raw_dates)
 
 	''' time-interpolated '''
 	# soundarray2,_,_ = get_interp_array('u',files=file_sound)	
@@ -71,7 +67,7 @@ def main():
 
 	# make_contourf(soundarray2,'unfiltered array')
 
-	'''smooth field, sigma=3 seems good for BVF'''
+	'''smooth field, sigma=2 seems good for BVF'''
 	sigma=2
 	sound_filtered = gaussian_filter(soundarray2, sigma,mode='nearest')
 
@@ -79,18 +75,33 @@ def main():
 	x=timestamp
 	y=hgt
 	array=sound_filtered
+	# print x[0]
+	
+	if usc==str(8):
+		st=np.datetime64('2003-01-12T16:40')
+		en=np.datetime64('2003-01-13T00:00')
+	elif usc==str(9):
+		st=np.datetime64('2003-01-22T16:40')
+		en=np.datetime64('2003-01-23T01:40')
+	elif usc==str(13):
+		st=np.datetime64('2004-02-17T15:00')
+		en=np.datetime64('2004-02-18T00:00')
 
-	make_imshow(array,'BVFm with gaussian filter',x,y,10,4000,raw_dates)
-	# make_imshow(array,'BVFm with gaussian filter',x,y,200,1200)
-	# make_imshow(array,'BVFm with gaussian filter',x,y,1200,4000)
+	title='BVFm with gaussian filter'
+	make_imshow(array,title,x,y,raw_dates)
+	# make_imshow(array,title,x,y,raw_dates,time=[st,en])
+	# make_imshow(array,title,x,y,None,vertical=[200,1200])
+	# make_imshow(array,title,x,y,None,vertical=[1200,4000])
 
-	# make_contourf(array,'BVFm with gaussian filter',x,y,10,4000)
-	# make_contourf(array,'BVFm with gaussian filter',x,y,200,1200)
-	# make_contourf(array,'BVFm with gaussian filter',x,y,1200,4000)
+	title='BVFm with gaussian filter'
+	# make_contourf(array,title,x,y)
+	# make_contourf(array,title,x,y,vertical=[200,1200],time=[st,en])
+	# make_contourf(array,title,x,y,vertical=[1200,4000],time=[st,en])
 
-	# array = make_statistical(sound_filtered,hgt,10,4000)
-	# array = make_statistical(sound_filtered,hgt,200,1200)
-	# array = make_statistical(sound_filtered,hgt,1200,4000)
+	# array = make_statistical(sound_filtered,x,y,vertical=[10,4000])
+	# array = make_statistical(sound_filtered,x,y,vertical=[10,4000],time=[st,en])
+	# array = make_statistical(sound_filtered,x,y,vertical=[200,1200])
+	# array = make_statistical(sound_filtered,x,y,vertical=[1200,4000])
 
 	# plt.show()
 	plt.show(block=False)
@@ -100,13 +111,32 @@ def main():
 
 
 
-def make_statistical(sound_filtered,hgt,bot,top):
+def make_statistical(sound_filtered,X,Y,**kwargs):
 
-	bot = np.where(hgt==bot)[0]
-	top = np.where(hgt==top)[0]
+	vertical = False
+	time = False
+	if kwargs:
+		for key,value in kwargs.iteritems():
+			if key == 'vertical':
+				vertical = True
+				bot = np.where(Y==value[0])[0]
+				top = np.where(Y==value[1])[0]
+			if key == 'time':
+				time = True
+				st = np.where(X==value[0])[0]
+				en = np.where(X==value[1])[0]
 
 	''' statistical analysis of bvf '''
-	bvf_sector=sound_filtered[bot:top,:]*1e4
+	if vertical and time:
+		bvf_sector=sound_filtered[bot:top,st:en]*1e4
+	elif vertical:
+		bvf_sector=sound_filtered[bot:top,:]*1e4
+	elif time:
+		bvf_sector=sound_filtered[:,st:en]*1e4
+	else:
+		bvf_sector=sound_filtered[:,:]*1e4
+
+	''' reshape to one column '''	
 	bvf_sector_rsh=np.reshape(bvf_sector,bvf_sector.size,1)
 
 	vmin=-2.
@@ -133,15 +163,28 @@ def make_statistical(sound_filtered,hgt,bot,top):
 	ax.text(-2,1,r'$\mu='+strfloat.format(mu)+',\ \sigma='+'{:2.1f}'.format(sigma)+'$',size=18)
 	plt.xlabel(r'$BVFm [\times10^{-4} s^{-2}]$')
 	plt.ylabel('Normal PDF')
-	bl=hgt[bot][0]
-	tl=hgt[top][0]
+	bl=Y[bot][0]
+	tl=Y[top][0]
 	if bl==10: bl=0
 	plt.title(r'$\mathrm{Histogram\ of\ BVFm}\ Layer: '+strint.format(bl)+'-'+strint.format(tl)+'mAGL$')	
 	plt.draw()
 
 	return bvf_sector_rsh
 
-def make_contourf(array,title,X,Y,bot,top):
+def make_contourf(array,title,X,Y,**kwargs):
+
+	vertical = False
+	time = False
+	if kwargs:
+		for key,value in kwargs.iteritems():
+			if key == 'vertical':
+				vertical = True
+				bot=value[0]
+				top=value[1]
+			if key == 'time':
+				time = True
+				st=value[0]
+				en=value[1]
 
 	''' filtered contourf plot '''
 	rows,cols = array.shape
@@ -162,46 +205,75 @@ def make_contourf(array,title,X,Y,bot,top):
 	yticklabs =[str(Y[j]-10) for j in yticks]
 	ax.set_yticklabels(yticklabs)
 
-	bot = np.where(Y==bot)[0]
-	top = np.where(Y==top)[0]
-	ax.set_ylim([bot,top])
+	if time:
+		st = np.where(X==st)[0]
+		en = np.where(X==en)[0]
+		ax.set_xlim([st,en])
+
+	if vertical:
+		bot = np.where(Y==bot)[0]
+		top = np.where(Y==top)[0]
+		ax.set_ylim([bot,top])
 
 	plt.colorbar(cf)
 	ax.invert_xaxis()
 	plt.suptitle(title)
 	plt.draw()	
 
-def make_imshow(array,title,X,Y,bot,top,raw_dates):
+def make_imshow(array,title,X,Y,raw_dates,**kwargs):
+
+	vertical = False
+	time = False
+	if kwargs:
+		for key,value in kwargs.iteritems():
+			if key == 'vertical':
+				vertical = True
+				bot=value[0]
+				top=value[1]
+			if key == 'time':
+				time = True
+				st=value[0]
+				en=value[1]
 
 	fig,ax=plt.subplots()
-
+	''' extent values help to put ticks in the middle of pixel '''
 	im=ax.imshow(array,interpolation='none',origin='top',aspect='auto',vmin=-8e-4,vmax=8e-4,
-						extent=[0, X.size, 1, 399])
+						extent=[-0.5, X.size-0.5, 1, 399])
 
 
-	xticks=range(0,X.size,3)
-	ax.set_xticks(xticks)
-	date_fmt='%d\n%H'
 	t = [pd.to_datetime(x - np.timedelta64(7, 'h')) for x in X]
+	M = t[0].minute
+	if M == 0:
+		xticks=range(0,X.size,3)
+	elif M==20:
+		xticks=range(2,X.size,3)
+	elif M==40:
+		xticks=range(1,X.size,3)
+
+	date_fmt='%d\n%H'
 	xticklabs = [t[i].strftime(date_fmt) for i in xticks]
 	ax.set_xticklabels(xticklabs)	
+	ax.set_xticks(np.asarray(xticks))
 	
 	yticks = range(0,Y.size,20)
 	ax.set_yticks(yticks)
 	yticklabs =[str(Y[j]-10) for j in yticks]
 	ax.set_yticklabels(yticklabs)
 
-	bot = np.where(Y==bot)[0]
-	top = np.where(Y==top)[0]
-	ax.set_ylim([bot,top])
+	if time:
+		st = np.where(X==st)[0]
+		en = np.where(X==en)[0]
+		ax.set_xlim([st,en])
 
-	xidx = [np.where(X==r)[0][0] for r in raw_dates]
-	# print idx
-	# print X
-	# print raw_dates
-	yidx = np.repeat([20],len(xidx))
-	ax.plot(xidx,yidx,'o')
+	if vertical:
+		bot = np.where(Y==bot)[0]
+		top = np.where(Y==top)[0]
+		ax.set_ylim([bot,top])
 
+	if raw_dates:
+		xidx = [np.where(X==r)[0][0] for r in raw_dates]
+		yidx = np.repeat([20],len(xidx))
+		ax.plot(xidx,yidx,'o')
 
 	ax.invert_xaxis()
 	plt.subplots_adjust(left=0.125,right=0.98,top=0.95,bottom=0.12)	
@@ -212,6 +284,7 @@ def make_imshow(array,title,X,Y,bot,top,raw_dates):
 	plt.draw()
 
 def get_sounding_files(usr_case):
+
 
 	''' set directory and input files '''
 	base_directory=local_directory + 'BALLOON'
@@ -226,7 +299,7 @@ def get_sounding_files(usr_case):
 		if f[-3:]=='tsv': 
 			file_sound.append(casedir+'/'+f)	
 
-	return file_sound
+	return file_sound, usr_case
 
 def get_raw_array(soundvar,file_sound):
 
@@ -284,8 +357,8 @@ def get_raw_array(soundvar,file_sound):
 			diff = np.diff(nanidx)			
 			idxjump = np.where(diff>1)[0]
 			ngaps= len(idxjump) +1
-			if ngaps>1 and nanidx[-1] !=svinterp.size-1 :
-				gapidx = np.split(nanidx,[idxjump+1])
+			if ngaps>1 and nanidx[-1] != svinterp.size-1 :
+				gapidx = np.split(nanidx,idxjump+1)
 				for g in gapidx:
 					first=g[0]
 					last=g[-1]
@@ -354,7 +427,7 @@ def get_interp_array(soundvar,**kwargs):
 
 	soundarray,var,tidx,hgtgrid,dates,raw_dates = get_raw_array(soundvar,file_sound)
 
-	''' create column variables to feed Rbf '''
+	''' create column variables x,y,z with all available data to feed Rbf '''
 	x=np.repeat(tidx,len(hgtgrid),axis=0)
 	x = x[:,np.newaxis]
 
