@@ -44,6 +44,7 @@ local_directory = '/Users/raulv/Documents/'
 # local_directory = 'home/rvalenzuela/'
 bvf_clevels=np.arange(-4e-4,10e-4,2e-4)
 
+usr_case=None
 
 def main():
 	
@@ -54,7 +55,7 @@ def main():
 	# # soundarray,_,_,_,_ = get_raw_array('thetaeq', file_sound)	
 	soundarray,_,_,y,x,raw_dates = get_raw_array('bvf_moist', file_sound)	
 	title='BVFm raw'
-	make_imshow(soundarray,title,x,y,raw_dates)
+	# make_imshow(soundarray,title,x,y,raw_dates)
 
 	''' time-interpolated '''
 	# soundarray2,_,_ = get_interp_array('u',files=file_sound)	
@@ -76,31 +77,51 @@ def main():
 	y=hgt
 	array=sound_filtered
 	# print x[0]
-	
-	if usc==str(8):
+
+
+	if usc==str(3):
+		''' stable '''	
+		# st=np.datetime64('2001-01-23T16:00')
+		# en=np.datetime64('2001-01-23T22:00')	
+		''' unstable '''	
+		st=np.datetime64('2001-01-23T22:00')
+		en=np.datetime64('2001-01-24T04:00')
+	elif usc==str(6):	
+		'''unstable '''
+		st=np.datetime64('2001-02-11T02:20')
+		en=np.datetime64('2001-02-11T06:00')
+		''' stable '''
+		# st=np.datetime64('2001-02-11T06:00')
+		# en=np.datetime64('2001-02-11T09:00')
+	elif usc==str(8):	
 		st=np.datetime64('2003-01-12T16:40')
-		en=np.datetime64('2003-01-13T00:00')
+		en=np.datetime64('2003-01-13T01:00')
 	elif usc==str(9):
-		st=np.datetime64('2003-01-22T16:40')
+		st=np.datetime64('2003-01-22T17:00')
 		en=np.datetime64('2003-01-23T01:40')
 	elif usc==str(13):
-		st=np.datetime64('2004-02-17T15:00')
+		st=np.datetime64('2004-02-17T17:00')
 		en=np.datetime64('2004-02-18T00:00')
 
-	title='BVFm with gaussian filter'
+
+	'''**** CASE 14 NEEDS FURTHER QC ****'''
+
+	title='BVFm with gaussian filter (sigma='+str(sigma)+')'
 	make_imshow(array,title,x,y,raw_dates)
 	# make_imshow(array,title,x,y,raw_dates,time=[st,en])
 	# make_imshow(array,title,x,y,None,vertical=[200,1200])
 	# make_imshow(array,title,x,y,None,vertical=[1200,4000])
 
-	title='BVFm with gaussian filter'
-	# make_contourf(array,title,x,y)
-	# make_contourf(array,title,x,y,vertical=[200,1200],time=[st,en])
-	# make_contourf(array,title,x,y,vertical=[1200,4000],time=[st,en])
+	title='BVFm with gaussian filter (sigma='+str(sigma)+')'
+	make_contourf(array,title,x,y,raw_dates)
+	# make_contourf(array,title,x,y,raw_dates,time=[st,en])
+	# make_contourf(array,title,x,y,raw_dates,vertical=[200,3000],time=[st,en])
+	# make_contourf(array,title,x,y,raw_dates,vertical=[1200,4000])
 
 	# array = make_statistical(sound_filtered,x,y,vertical=[10,4000])
-	# array = make_statistical(sound_filtered,x,y,vertical=[10,4000],time=[st,en])
+	# array = make_statistical(sound_filtered,x,y,vertical=[200,3000],time=[st,en])
 	# array = make_statistical(sound_filtered,x,y,vertical=[200,1200])
+	# array = make_statistical(sound_filtered,x,y,vertical=[200,1200],time=[st,en])
 	# array = make_statistical(sound_filtered,x,y,vertical=[1200,4000])
 
 	# plt.show()
@@ -148,7 +169,6 @@ def make_statistical(sound_filtered,X,Y,**kwargs):
 	print np.sum(prob)
 	fig,ax=plt.subplots()
 	ax.bar(bins,prob,width=0.5)
-
 	mu = np.mean(bvf_sector_rsh)
 	sigma = np.std(bvf_sector_rsh)
 	res=vdel*0.1
@@ -171,7 +191,7 @@ def make_statistical(sound_filtered,X,Y,**kwargs):
 
 	return bvf_sector_rsh
 
-def make_contourf(array,title,X,Y,**kwargs):
+def make_contourf(array,title,X,Y,raw_dates,**kwargs):
 
 	vertical = False
 	time = False
@@ -186,14 +206,27 @@ def make_contourf(array,title,X,Y,**kwargs):
 				st=value[0]
 				en=value[1]
 
+	''' repeat last column so contourf can fill until X.size '''
+	lastc=array[:,-1]
+	lastc=np.reshape(lastc,(lastc.size,1))
+	array=np.hstack((array,lastc))
+
 	''' filtered contourf plot '''
 	rows,cols = array.shape
 	xx,yy = np.meshgrid(range(cols),range(rows))
 	fig,ax=plt.subplots()
 	cf=ax.contourf(xx,yy,array,levels=bvf_clevels)
-	# cf=ax.contourf(X,Y,sound_filtered,levels=range(290,309))
+
+	t = [pd.to_datetime(x - np.timedelta64(7, 'h')) for x in X]
+	M = t[0].minute
+	if M == 0:
+		xticks=range(0,X.size,3)
+	elif M==20:
+		xticks=range(2,X.size,3)
+	elif M==40:
+		xticks=range(1,X.size,3)
 	
-	xticks=range(0,X.size,3)
+	# xticks=range(0,X.size,3)
 	ax.set_xticks(xticks)
 	date_fmt='%d\n%H'
 	t = [pd.to_datetime(x - np.timedelta64(7, 'h')) for x in X]
@@ -208,16 +241,26 @@ def make_contourf(array,title,X,Y,**kwargs):
 	if time:
 		st = np.where(X==st)[0]
 		en = np.where(X==en)[0]
-		ax.set_xlim([st,en])
+		ax.set_xlim([st,en+0.5])
+	else:
+		ax.set_xlim([0,X.size-0.5])
 
 	if vertical:
 		bot = np.where(Y==bot)[0]
 		top = np.where(Y==top)[0]
 		ax.set_ylim([bot,top])
 
-	plt.colorbar(cf)
+	if raw_dates:
+		xidx = [np.where(X==r)[0][0] for r in raw_dates]
+		yidx = np.repeat([20],len(xidx))
+		ax.plot(xidx,yidx,'o', color='black', markersize=8)
+
 	ax.invert_xaxis()
+	plt.colorbar(cf)
+	plt.subplots_adjust(left=0.125,right=0.98,top=0.95,bottom=0.12)	
 	plt.suptitle(title)
+	plt.xlabel(r'$\Leftarrow$'+' Time [UTC]')
+	plt.ylabel('Altitude AGL [m]')	
 	plt.draw()	
 
 def make_imshow(array,title,X,Y,raw_dates,**kwargs):
@@ -337,6 +380,7 @@ def get_raw_array(soundvar,file_sound):
 		''' variable '''
 		df = mf.parse_sounding(f)
 		sv= df[soundvar][ df.index<top_limit ].values
+
 		Z=df.index[ df.index<top_limit ].values
 		''' interpolate to a common vertical grid '''
 		f=interp1d(Z,sv)
@@ -346,6 +390,7 @@ def get_raw_array(soundvar,file_sound):
 				svinterp=np.append(svinterp,f(h))
 			except ValueError:
 				svinterp=np.append(svinterp,np.nan)
+		
 
 		''' take care of vertical nan values in raw soundings;
 		more gaps can show up if the top of the vertical grid 
@@ -395,6 +440,8 @@ def get_raw_array(soundvar,file_sound):
 		else:
 			''' add column to list '''
 			var.append(svinterp)
+
+
 
 	''' time grid with 20 minute spacing'''
 	t1=timestamps[0]-np.timedelta64(20,'m')
