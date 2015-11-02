@@ -40,8 +40,8 @@ from itertools import product
 # 		'xtick.labelsize':16}
 # sns.set(rc=rc)
 
-local_directory = '/Users/raulv/Documents/'
-# local_directory = 'home/rvalenzuela/'
+# local_directory = '/Users/raulv/Documents/'
+local_directory = '/home/rvalenzuela/'
 bvf_clevels=np.arange(-4e-4,10e-4,2e-4)
 
 usr_case=None
@@ -106,6 +106,10 @@ def main():
 
 	'''**** CASE 14 NEEDS FURTHER QC ****'''
 
+	''' case 07 - P3 leg04 '''
+	st=np.datetime64('2001-02-17T17:20')
+	en=np.datetime64('2001-02-17T18:00')
+
 	title='BVFm with gaussian filter (sigma='+str(sigma)+')'
 	make_imshow(array,title,x,y,raw_dates)
 	# make_imshow(array,title,x,y,raw_dates,time=[st,en])
@@ -115,10 +119,12 @@ def main():
 	title='BVFm with gaussian filter (sigma='+str(sigma)+')'
 	make_contourf(array,title,x,y,raw_dates)
 	# make_contourf(array,title,x,y,raw_dates,time=[st,en])
+	make_contourf(array,title,x,y,raw_dates,vertical=[10,1500],time=[st,en])
 	# make_contourf(array,title,x,y,raw_dates,vertical=[200,3000],time=[st,en])
 	# make_contourf(array,title,x,y,raw_dates,vertical=[1200,4000])
 
-	# array = make_statistical(sound_filtered,x,y,vertical=[10,4000])
+	array = make_statistical(sound_filtered,x,y,vertical=[10,4000],time=[st,en])
+	array = make_statistical(sound_filtered,x,y,vertical=[10,1500],time=[st,en])
 	# array = make_statistical(sound_filtered,x,y,vertical=[200,3000],time=[st,en])
 	# array = make_statistical(sound_filtered,x,y,vertical=[200,1200])
 	# array = make_statistical(sound_filtered,x,y,vertical=[200,1200],time=[st,en])
@@ -241,7 +247,7 @@ def make_contourf(array,title,X,Y,raw_dates,**kwargs):
 	if time:
 		st = np.where(X==st)[0]
 		en = np.where(X==en)[0]
-		ax.set_xlim([st,en+0.5])
+		ax.set_xlim([st,en+0.25])
 	else:
 		ax.set_xlim([0,X.size-0.5])
 
@@ -345,7 +351,7 @@ def get_sounding_files(usr_case):
 	return file_sound, usr_case
 
 def get_raw_array(soundvar,file_sound):
-
+	
 	file_sound.sort()
 
 	''' height grid with 10 m resolution'''
@@ -468,7 +474,7 @@ def get_interp_array(soundvar,**kwargs):
 
 	for key,value in kwargs.iteritems():
 		if key == 'case':
-			file_sound=get_sounding_files(value)
+			file_sound=get_sounding_files(value)[0]
 		elif key == 'files':
 			file_sound = value
 
