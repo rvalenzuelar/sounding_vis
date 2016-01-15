@@ -10,7 +10,6 @@
 import pandas as pd
 import metpy.plots as metplt
 import metpy.calc as metcal
-from metpy.units import units, concatenate
 
 import seaborn as sns
 import matplotlib.pyplot as plt
@@ -24,13 +23,16 @@ import sys
 import Thermodyn as thermo
 import Meteoframes as mf
 
+from scipy.interpolate import interp1d
+from metpy.units import units, concatenate
+
 ''' set color codes in seaborn '''
 sns.set_color_codes()
 
 rc = {'axes.titlesize': 24,
 		'axes.labelsize': 18,
-		'ytick.labelsize':16,
-		'xtick.labelsize':16}
+		'ytick.labelsize':13,
+		'xtick.labelsize':13}
 
 # mpl.rcParams.update(rc)
 
@@ -48,15 +50,13 @@ file_sound=[]
 for f in out:
 	if f[-3:]=='tsv': 
 		file_sound.append(casedir+'/'+f)
-
+file_sound.sort()
 
 def main():
 
-	iterfile=iter(file_sound)
-	for f in iterfile:
+	for f in file_sound:
 		print f
-		df = mf.parse_sounding(f)
-
+		df = mf.parse_sounding2(f)
 
 		fname = os.path.basename(f)
 		''' removes file extension and split date '''
@@ -71,10 +71,10 @@ def main():
 			date = dt.datetime.strptime(raw_date, "%Y%m%d%H%M")
 		
 		# plot_skew(df,date)
-		plot_thermo(df,date,top=5000)
+		plot_thermo(df,date,top=5.)
 		# compare_potential_temp(df,date)
 		# break
-
+		# print df
 	plt.show()
 	# plt.show(block=False)
 
@@ -167,7 +167,7 @@ def plot_skew(sounding,date):
 
 def plot_thermo(sounding,date,**kwarg):
 
-	hgt=sounding.index # [m]
+	hgt=sounding.index/1000. # [m]
 	pres=sounding.P #[hPa]
 	TE=sounding.TE - 273.15 # [C]
 	TD=sounding.TD - 273.15 # [C]
@@ -180,7 +180,7 @@ def plot_thermo(sounding,date,**kwarg):
 	BVFd=sounding.bvf_dry
 	BVFm=sounding.bvf_moist
 
-	fig,ax = plt.subplots(1,5,sharey=True,figsize=(11,8.5))
+	fig,ax = plt.subplots(1,5,sharey=True,figsize=(13,8.5))
 
 	hgt_lim=kwarg['top']
 
@@ -192,7 +192,7 @@ def plot_thermo(sounding,date,**kwarg):
 	ax[n].set_ylim([0,hgt_lim])
 	add_minor_grid(ax[n])
 	ax[n].set_xlabel('Temperature [C]')
-	ax[n].set_ylabel('Altitude [m]')
+	ax[n].set_ylabel('Altitude [km]')
 
 	n=1
 	ln1=ax[n].plot(mixr,hgt,label='mixr')
@@ -235,19 +235,41 @@ def plot_thermo(sounding,date,**kwarg):
 	ax[n].set_xlabel('Wind Speed [ms-1]')
 
 	n=4
-	ax[n].plot(BVFd*10000.,hgt,label='dry')
-	ax[n].plot(BVFm*10000.,hgt,label='moist')	
+	bvfd=BVFd*10000.
+	bvfm=BVFm*10000.
+	ax[n].plot(bvfd,hgt,label='dry')
+	ax[n].plot(bvfm,hgt,label='moist')	
 	ax[n].axvline(x=0,linestyle=':',color='r')
 	ax[n].legend(loc=2)
 	ax[n].set_xlim([-6,6])
 	ax[n].set_ylim([0,hgt_lim])
 	add_minor_grid(ax[n])
-	ax[n].set_xlabel('BVF (x10^-4) [s-1]')
+	ax[n].set_xlabel('BVF (x10^-4) [s-2]')
+
+	# f=interp1d(hgt, range(len(hgt)))
+	# idx=int(np.ceil(f(1.)))
+	# dfslice=bvfm.iloc[0:idx+1]
+	# mean = np.nanmean(dfslice)
+	# median = np.nanmedian(dfslice)
+	# minn = np.amin(dfslice)
+	# maxx = np.amax(dfslice)
+	# strout='N^2 moist (e-4) lowest 1000 mts: mean={:1.1f}, median={:1.1f}, min={:1.1f}, max={:1.1f}'	
+	# print strout.format(mean,median,minn,maxx)	
+	# dfslice=bvfd.iloc[0:idx+1]
+	# mean = np.nanmean(dfslice)
+	# median = np.nanmedian(dfslice)
+	# minn = np.amin(dfslice)
+	# maxx = np.amax(dfslice)
+	# strout='N^2 dry (e-4) lowest 1000 mts: mean={:1.1f}, median={:1.1f}, min={:1.1f}, max={:1.1f}\n'
+	# print strout.format(mean,median,minn,maxx)
+
+	# idx=int(np.ceil(f(0.5)))
+	# print sounding.iloc[0:idx+1]
 
 	l1='Profile at BBY from sounding '
 	l2=date.strftime('%Y-%m-%d %H:%M:%S UTC')
 	plt.suptitle(l1+l2)
-	plt.subplots_adjust(bottom=0.06,top=0.89)
+	plt.subplots_adjust(bottom=0.08,top=0.89,left=0.06, right=0.98)
 
 	plt.draw()
 
