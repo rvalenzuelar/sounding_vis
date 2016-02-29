@@ -384,7 +384,7 @@ def get_raw_array(soundvar,file_sound):
 		timestamps.append(np.datetime64(raw_date))
 
 		''' variable '''
-		df = mf.parse_sounding(f)
+		df = mf.parse_sounding2(f)
 		sv= df[soundvar][ df.index<top_limit ].values
 
 		Z=df.index[ df.index<top_limit ].values
