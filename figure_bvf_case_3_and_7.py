@@ -9,7 +9,9 @@ import numpy as np
 import sounding as so
 import Meteoframes as mf
 import matplotlib.pyplot as plt
+from rv_utilities import discrete_cmap
 from matplotlib import rcParams
+
 rcParams['xtick.labelsize'] = 15
 rcParams['ytick.labelsize'] = 15
 rcParams['legend.fontsize'] = 15
@@ -19,15 +21,19 @@ rcParams['mathtext.default'] = 'sf'
 
 scale=1.2
 fig,axes = plt.subplots(2,1,sharex=True,figsize=(5*scale,10*scale))
-axes[0].set_gid('(a) 23-24Jan01 (n=7)')
-axes[1].set_gid('(b) 17Feb01 (n=11)')
+axes[0].set_gid('(a) 23-24Jan01')
+axes[1].set_gid('(b) 17Feb01')
 
+nobs=('n=7','n=11')
 
 infiles3,_ = so.get_sounding_files('3', homedir='/localdata')
 infiles7,_ = so.get_sounding_files('7', homedir='/localdata')
 
-color=((1,0,0,1),(0,0.8,0,1) )
+cmap = discrete_cmap(7, base_cmap='Set1')
+color=(cmap(0),cmap(1))
+
 infiles=(infiles3,infiles7)
+
 
 for n,ax in enumerate(axes):
 
@@ -47,8 +53,17 @@ for n,ax in enumerate(axes):
     meanx = np.expand_dims(np.nanmean(prof,axis=1),axis=1)
     y2 = y[:top_idx]
     ax.plot(meanx,y2,color=color[n],lw=3)
-    ax.text(0.05,0.9,ax.get_gid(),transform=ax.transAxes,
-                fontsize=15)
+    xpos = 0.08
+    ax.text(xpos,0.9,ax.get_gid(),
+            fontsize=15,
+            weight='bold',
+            transform=ax.transAxes,
+            )
+    ax.text(xpos+0.07,0.85,nobs[n],
+            fontsize=15,
+            weight='bold',
+            transform=ax.transAxes,            
+            )     
      
     ax.set_xlim([-4,4])
     ax.set_ylim([0,2000])
@@ -63,6 +78,6 @@ plt.subplots_adjust(hspace=0.05)
 
 #plt.show()
 
-fname='/home/raul/Desktop/N2.png'
+fname='/home/raul/Desktop/fig_N2.png'
 plt.savefig(fname, dpi=150, format='png',papertype='letter',
             bbox_inches='tight')
